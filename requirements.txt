@@ -1,2 +1,3 @@
 -r jobs/requirements.txt
 -r messaging/requirements.txt
+-r cron/requirements.txt
