@@ -1,0 +1,2 @@
+-r jobs/requirements.txt
+-r messaging/requirements.txt
