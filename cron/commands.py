@@ -4,34 +4,22 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from vendor.cron.types import GdprJob, IngestionJob, ModuleJob
+from vendor.cron.types import ModuleJob, ScriptJob
 
 
 def module_command(python: Path, job: ModuleJob) -> list[str]:
     return [str(python), "-m", job.module, *job.args]
 
 
-def ingestion_command(python: Path, job: IngestionJob) -> list[str]:
-    if job.runner == "ml":
-        return [str(python), "-m", "ml", job.graph, *job.args]
-    if job.runner == "report":
-        return [str(python), "-m", "reports", job.graph, *job.args]
-    return [str(python), "-m", "pipelines.run", job.graph]
+def script_command(python: Path, job: ScriptJob) -> list[str]:
+    return [str(python), *job.argv]
 
 
-def gdpr_command(python: Path, job: GdprJob, *, script: Path) -> list[str]:
-    return [str(python), str(script)]
-
-
-def command_for(job: Any, *, python: Path, gdpr_script: Path | None = None) -> list[str]:
+def command_for(job: Any, *, python: Path) -> list[str]:
     if isinstance(job, ModuleJob):
         return module_command(python, job)
-    if isinstance(job, IngestionJob):
-        return ingestion_command(python, job)
-    if isinstance(job, GdprJob):
-        if gdpr_script is None:
-            raise ValueError(f"GdprJob {job.job_id} requires gdpr_script")
-        return gdpr_command(python, job, script=gdpr_script)
+    if isinstance(job, ScriptJob):
+        return script_command(python, job)
     if hasattr(job, "module"):
         return module_command(
             python,
@@ -41,14 +29,27 @@ def command_for(job: Any, *, python: Path, gdpr_script: Path | None = None) -> l
                 module=job.module,
                 description=job.description,
                 args=tuple(getattr(job, "args", ()) or ()),
+                aliases=tuple(getattr(job, "aliases", ()) or ()),
             ),
         )
-    if hasattr(job, "graph"):
-        return ingestion_command(python, job)
-    raise TypeError(f"Do not know how to build a command for job {getattr(job, 'job_id', job)!r}")
+    if hasattr(job, "argv"):
+        return script_command(
+            python,
+            ScriptJob(
+                job_id=job.job_id,
+                schedule=job.schedule,
+                description=job.description,
+                argv=tuple(job.argv),
+                aliases=tuple(getattr(job, "aliases", ()) or ()),
+            ),
+        )
+    raise TypeError(
+        f"Unsupported job type for {getattr(job, 'job_id', job)!r}. "
+        "Use ModuleJob, ScriptJob, or set CRON_COMMAND_BUILDER.",
+    )
 
 
-def load_command_builder(entry: str | None) -> Callable[[Any, Path, Path | None], list[str]] | None:
+def load_command_builder(entry: str | None) -> Callable[[Any, Path], list[str]] | None:
     if not entry:
         return None
     module_path, attr = entry.split(":", 1)
@@ -59,8 +60,8 @@ def load_command_builder(entry: str | None) -> Callable[[Any, Path, Path | None]
     if not callable(builder):
         raise TypeError(f"CRON_COMMAND_BUILDER {entry!r} is not callable")
 
-    def _wrap(job: Any, python: Path, gdpr_script: Path | None) -> list[str]:
-        result = builder(job, python, gdpr_script)
+    def _wrap(job: Any, python: Path) -> list[str]:
+        result = builder(job, python)
         if not isinstance(result, list):
             raise TypeError(f"Command builder must return list[str], got {type(result)}")
         return result

@@ -96,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
     jobs = all_jobs(registry)
     if not jobs:
         print(
-            "No cron jobs configured. Set CRON_JOBS or add SCHEDULED_JOBS / INGESTION_JOBS to cron.schedules.",
+            "No cron jobs configured. Set CRON_JOBS=cron.schedules:YOUR_JOBS_TUPLE.",
             file=sys.stderr,
         )
         return 1

@@ -5,7 +5,7 @@ Provider-agnostic email sending with pluggable SMTP (or custom) backends. Lives 
 ## Quick start (vendor)
 
 ```bash
-cp -r /path/to/GeoTwin-ELBG/vendor ./vendor
+cp -r /path/to/vendor ./vendor
 echo "-r vendor/messaging/requirements.txt" >> requirements.txt
 ```
 
@@ -40,7 +40,7 @@ from vendor.messaging.types import EmailDeliveryRequest, EmailMessage
 
 ## Hard rule
 
-`vendor/messaging/` must **not** import `auth`, `tasks`, `db`, `rest`, or other product code. GeoTwin wires Keycloak in [`emails/`](../../emails/).
+`vendor/messaging/` must **not** import `auth`, `tasks`, `db`, `rest`, or other product code. Wire auth and templates in a product-local adapter package.
 
 ## Mailtrap (SMTP)
 

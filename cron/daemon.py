@@ -13,7 +13,13 @@ from typing import Any
 
 from vendor.cron.env import runtime_env
 from vendor.cron.registry import CronRegistry, all_jobs, resolve_command
-from vendor.cron.runtime import CronPaths, poll_interval_seconds, resolve_cron_paths, state_dir
+from vendor.cron.runtime import (
+    CronPaths,
+    poll_interval_seconds,
+    resolve_cron_paths,
+    state_dir,
+    timezone_name,
+)
 from vendor.cron.timing import is_due, next_run
 
 logger = logging.getLogger(__name__)
@@ -84,11 +90,11 @@ def daemonize(log_path: Path) -> None:
 def build_runtime_env(paths: CronPaths) -> dict[str, str]:
     extra = os.getenv("CRON_PYTHONPATH_EXTRA", "")
     extra_parts = [part for part in extra.split(":") if part]
-    root_var = os.getenv("CRON_ROOT_ENV_VAR")
+    repo_key = os.getenv("CRON_REPO_ENV_KEY")
     return runtime_env(
         paths.root,
         extra_pythonpath=extra_parts,
-        root_env_var=root_var,
+        repo_env_key=repo_key,
     )
 
 
@@ -98,7 +104,7 @@ class SubprocessScheduler:
         paths: CronPaths,
         registry: CronRegistry,
         *,
-        command_builder: Callable[[Any, Path, Path | None], list[str]] | None = None,
+        command_builder: Callable[[Any, Path], list[str]] | None = None,
         env: dict[str, str] | None = None,
     ) -> None:
         self.paths = paths
@@ -136,7 +142,6 @@ class SubprocessScheduler:
         return resolve_command(
             job,
             python=self.paths.python,
-            registry=self.registry,
             custom_builder=self.command_builder,
         )
 
@@ -220,7 +225,7 @@ def start_scheduler(
     *,
     foreground: bool,
     python: str | None = None,
-    command_builder: Callable[[Any, Path, Path | None], list[str]] | None = None,
+    command_builder: Callable[[Any, Path], list[str]] | None = None,
     banner: str = "cron",
 ) -> None:
     paths = resolve_cron_paths(python)
@@ -277,34 +282,16 @@ def scheduler_status(registry: CronRegistry) -> dict[str, object]:
     running = pid is not None and is_running(pid)
     now = datetime.now(UTC)
 
-    payload_jobs: list[dict[str, object]] = []
-    for job in registry.jobs:
-        entry: dict[str, object] = {
+    payload_jobs = [
+        {
             "job_id": job.job_id,
-            "kind": "job",
             "schedule": job.schedule,
             "description": job.description,
             "next_run": next_run(job.schedule, after=now).isoformat(),
             "last_run": None,
         }
-        if getattr(job, "graph", None):
-            entry["graph"] = job.graph
-            entry["kind"] = "ingestion"
-        if getattr(job, "module", None):
-            entry["module"] = job.module
-        payload_jobs.append(entry)
-
-    for job in registry.gdpr_jobs:
-        payload_jobs.append(
-            {
-                "job_id": job.job_id,
-                "kind": "gdpr",
-                "schedule": job.schedule,
-                "description": job.description,
-                "next_run": next_run(job.schedule, after=now).isoformat(),
-                "last_run": None,
-            },
-        )
+        for job in registry.jobs
+    ]
 
     return {
         "running": running,
@@ -312,6 +299,6 @@ def scheduler_status(registry: CronRegistry) -> dict[str, object]:
         "log_file": str(paths.log_path),
         "state_dir": str(state_dir()),
         "poll_seconds": poll_interval_seconds(),
-        "timezone": "UTC",
+        "timezone": timezone_name(),
         "jobs": payload_jobs,
     }

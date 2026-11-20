@@ -1,6 +1,6 @@
 # vendor
 
-Portable, domain-free kits shared across GeoTwin, AquaGuard, and other twins. Copy the whole `vendor/` tree into a new repo and wire product-specific code in `tasks/`, `emails/`, etc.
+Portable kits copied into product repos. Domain code stays in `tasks/`, `cron/schedules.py`, adapters, etc.
 
 | Package | Import | CLI |
 | --- | --- | --- |
@@ -8,13 +8,31 @@ Portable, domain-free kits shared across GeoTwin, AquaGuard, and other twins. Co
 | [`vendor/messaging/`](messaging/) | `vendor.messaging` | (library only) |
 | [`vendor/cron/`](cron/) | `vendor.cron` | `python -m vendor.cron start` |
 
+## Shared conventions
+
+| Variable | Used by | Purpose |
+| --- | --- | --- |
+| `REPO_ROOT` | jobs, cron | Repository root (overridable via `JOBS_REPO_ROOT` / `CRON_REPO_ROOT`) |
+| `JOBS_STATE_DIR` / `CRON_STATE_DIR` | worker, cron | Absolute runtime state (pid, log) |
+| `JOBS_STATE_SUBDIR` / `CRON_STATE_SUBDIR` | worker, cron | Default `.vendor-state/…` under repo root |
+
 ## Repeated modules under `~/work/repos/`
 
-| Pattern | Twins using it | In this repo |
+| Pattern | In this repo | Product owns |
 | --- | --- | --- |
-| Procrastinate worker kit (`jobs/`) | GeoTwin (`vendor/jobs`), AquaGuard, AI Lift, PerTouriSM, time-machine (`jobs/` at root — migrate to `vendor.jobs`) | [`jobs/`](jobs/) |
-| Email kit (`messaging/`) | GeoTwin | [`messaging/`](messaging/) |
-| Ingestion cron daemon (`cron/`) | GeoTwin-ELBG, aqua-guard, ai-lift, pertourism | [`cron/`](cron/) |
-| `*_paths.py` (`.geotwin/`, `.aquaguard/`, …) | GeoTwin, AquaGuard, AI Lift, PerTouriSM | *product-local* (set `CRON_STATE_NAME` / `CRON_REPO_ROOT`) |
+| Procrastinate worker | [`jobs/`](jobs/) | `tasks/`, `JOBS_APP` |
+| Email transport | [`messaging/`](messaging/) | recipient resolver, templates, defer hook |
+| Cron daemon | [`cron/`](cron/) | `cron/schedules.py`, optional `cron/commands.py` |
+| `*_paths.py` | — | per-repo state dir names (map via `*_STATE_DIR` env) |
 
-GeoTwin product wiring for email: [`emails/`](../emails/) (Keycloak + notifications).
+## Legacy twin env (when syncing)
+
+Products that used `.geotwin/` pid files can set without forking vendor:
+
+```bash
+export REPO_ROOT=$PWD
+export JOBS_STATE_SUBDIR=.geotwin
+export CRON_STATE_SUBDIR=.geotwin
+```
+
+Ingestion-style cron still needs `CRON_COMMAND_BUILDER=cron.commands:build_command` in the product repo.

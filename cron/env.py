@@ -29,34 +29,48 @@ def build_pythonpath(root: Path, *, extra: Iterable[str] = ()) -> str:
     return ":".join(entries)
 
 
-def _rewrite_compose_hosts(env: dict[str, str]) -> None:
-    """When the daemon runs on the host, map Compose service names to localhost."""
-    if env.get("DATABASE_URL", "").find("@postgres:") >= 0:
-        env["DATABASE_URL"] = env["DATABASE_URL"].replace("@postgres:", "@localhost:")
-    if env.get("GARAGE_S3_ENDPOINT", "").find("//garage:") >= 0:
-        env["GARAGE_S3_ENDPOINT"] = env["GARAGE_S3_ENDPOINT"].replace("//garage:", "//localhost:")
-    if env.get("SCORPIO_URL", "").find("//scorpio:") >= 0:
-        env["SCORPIO_URL"] = env["SCORPIO_URL"].replace("//scorpio:", "//localhost:")
+def apply_substring_rewrites(env: dict[str, str]) -> None:
+    """Apply ``CRON_ENV_SUBSTRING_REWRITES`` (comma-separated ``needle>>replacement``)."""
+    spec = os.getenv("CRON_ENV_SUBSTRING_REWRITES", "")
+    if not spec:
+        return
+    for chunk in spec.split(","):
+        chunk = chunk.strip()
+        if not chunk or ">>" not in chunk:
+            continue
+        needle, replacement = chunk.split(">>", 1)
+        if not needle:
+            continue
+        for key, value in list(env.items()):
+            if needle in value:
+                env[key] = value.replace(needle, replacement)
 
 
 def runtime_env(
     root: Path,
     *,
     extra_pythonpath: Iterable[str] = (),
-    root_env_var: str | None = None,
-    rewrite_compose_hosts: bool | None = None,
+    repo_env_key: str | None = None,
     mutator: Callable[[dict[str, str]], None] | None = None,
 ) -> dict[str, str]:
     env = os.environ.copy()
     env.update(load_env_file(root))
-    if root_env_var:
-        env[root_env_var] = str(root)
+    if repo_env_key:
+        env[repo_env_key] = str(root)
+    env["REPO_ROOT"] = str(root)
     env["PYTHONPATH"] = build_pythonpath(root, extra=extra_pythonpath)
 
-    if rewrite_compose_hosts is None:
-        rewrite_compose_hosts = os.getenv("CRON_REWRITE_COMPOSE_HOSTS", "1") == "1"
-    if rewrite_compose_hosts:
-        _rewrite_compose_hosts(env)
+    apply_substring_rewrites(env)
+
+    hook = os.getenv("CRON_RUNTIME_ENV_HOOK")
+    if hook:
+        module_path, attr = hook.split(":", 1)
+        import importlib
+
+        fn = getattr(importlib.import_module(module_path), attr)
+        if not callable(fn):
+            raise TypeError(f"CRON_RUNTIME_ENV_HOOK {hook!r} is not callable")
+        fn(env)
 
     if mutator is not None:
         mutator(env)

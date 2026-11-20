@@ -1,13 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
-
-
-class Schedulable(Protocol):
-    job_id: str
-    schedule: str
-    description: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,23 +12,15 @@ class ModuleJob:
     module: str
     description: str
     args: tuple[str, ...] = ()
+    aliases: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
-class IngestionJob:
-    """Bonobo / twin ingestion graph (GeoTwin-style twins)."""
+class ScriptJob:
+    """Run ``python`` with a fixed argv tail (script path and CLI flags)."""
 
-    job_id: str
-    graph: str
-    schedule: str
-    source: str
-    description: str
-    runner: str = "pipeline"
-    args: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class GdprJob:
     job_id: str
     schedule: str
     description: str
+    argv: tuple[str, ...]
+    aliases: tuple[str, ...] = ()

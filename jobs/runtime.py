@@ -6,14 +6,18 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from vendor.paths import repo_root
+
 
 def state_dir() -> Path:
     """Return the directory for worker PID/log files."""
     explicit = os.getenv("JOBS_STATE_DIR")
     if explicit:
         return Path(explicit)
-    root = os.getenv("GEOTWIN_ROOT", os.getcwd())
-    return Path(root) / ".geotwin"
+    sub = os.getenv("JOBS_STATE_SUBDIR", ".vendor-state/jobs")
+    directory = repo_root(prefix="JOBS") / sub
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
 
 
 def pid_file() -> Path:
@@ -32,5 +36,4 @@ class WorkerPaths:
 
 def resolve_worker_paths() -> WorkerPaths:
     directory = state_dir()
-    directory.mkdir(parents=True, exist_ok=True)
-    return WorkerPaths(pid_path=pid_file(), log_path=log_file())
+    return WorkerPaths(pid_path=directory / "jobs.pid", log_path=directory / "jobs.log")
